@@ -2,7 +2,7 @@
 name = "microapi"
 version = "0.1.0"
 description = ""
-authors = ["BiqRedMac <redshine.nik@gmail.com>"]
+authors = ["BiqRed <biqred.shine@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
