@@ -5,7 +5,7 @@ from microapi.generator import LibGenerator
 from microapi.service import Service
 from microapi.middleware import Middleware
 from microapi.types import Lifespan
-from microapi.transport import Transport, gRPC
+from microapi.transport import Transport, GRPC
 from microapi.hot_reload import HotReload
 
 
@@ -45,7 +45,7 @@ class MicroAPI:
 
     async def run(
             self,
-            transport: Transport = gRPC(),
+            transport: Transport = GRPC(),
             *,
             auto_generate_lib: bool = True,
             generated_lib_dir: str = Path('lib'),

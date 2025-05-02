@@ -1,7 +1,8 @@
-from .base import Transport
-from .grpc import gRPC
+from .base import Transport, TransportClient, TransportServer
+from .grpc import GRPC
 
 __all__ = [
-    "gRPC",
-    "Transport",
+    "GRPC",
+
+    "Transport", "TransportClient", "TransportServer",
 ]
