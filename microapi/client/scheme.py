@@ -1,5 +1,5 @@
 from pydantic import BaseModel
 
 
-class BaseScheme(BaseModel):
+class ClientScheme(BaseModel):
     pass

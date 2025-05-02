@@ -1,5 +1,5 @@
 from pydantic import BaseModel
 
 
-class Scheme(BaseModel):
+class ServerScheme(BaseModel):
     model_config = {'from_attributes': True}

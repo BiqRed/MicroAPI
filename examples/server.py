@@ -19,8 +19,6 @@ async def get_users(payload: GetUsersPayload) -> types.Streaming[User]:
     async for user in users:
         yield User.model_validate(user)
 
-    yield types.StreamingEnd
-
 
 @service.method
 async def add_users(stream: types.Stream[User]) -> None:
@@ -33,5 +31,3 @@ async def add_and_get_users(stream: types.Stream[User]) -> types.Streaming[User]
     async for user in stream:
         created_user = await UserModel.create(**user.model_dump())
         yield created_user
-
-    yield types.StreamingEnd

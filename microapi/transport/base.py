@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Callable, Awaitable, AsyncIterator, Protocol
-
-from pydantic import BaseModel
 
 
 class Stream(Protocol):
@@ -10,7 +9,8 @@ class Stream(Protocol):
     async def close(self) -> None: ...
 
 
-class Request(BaseModel):
+@dataclass
+class Request:
     service: str
     method: str
     payload: str | list[str]
@@ -18,7 +18,8 @@ class Request(BaseModel):
     stream: Stream | None = None
 
 
-class Response(BaseModel):
+@dataclass
+class Response:
     payload: str | AsyncIterator[str]
     metadata: dict[str, str]
     end_stream: bool = True
@@ -28,10 +29,7 @@ class Response(BaseModel):
 Handler = Callable[[Request], Awaitable[Response]]
 
 
-class Transport(ABC):
-    def __init__(self, name: str):
-        self.name = name
-
+class TransportServer(ABC):
     @abstractmethod
     async def start(self) -> None:
         raise NotImplementedError
@@ -42,4 +40,16 @@ class Transport(ABC):
 
     @abstractmethod
     async def serve(self, handler: Handler) -> None:
+        raise NotImplementedError
+
+
+class TransportClient(ABC):
+    pass
+
+
+class Transport(ABC):
+    def get_server(self) -> TransportServer:
+        raise NotImplementedError
+
+    def get_client(self) -> TransportClient:
         raise NotImplementedError

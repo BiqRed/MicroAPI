@@ -45,7 +45,7 @@ class MicroAPI:
 
     async def run(
             self,
-            transport: TransportBase = gRPC(),
+            transport: Transport = gRPC(),
             *,
             auto_generate_lib: bool = True,
             generated_lib_dir: str = Path('lib'),
