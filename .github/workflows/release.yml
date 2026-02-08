@@ -17,6 +17,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    # This must match the (optional) Environment name configured in PyPI's trusted publisher.
+    # If you didn't configure an environment on PyPI, remove this line.
+    environment: pypi
     steps:
       - uses: actions/checkout@v4
 
