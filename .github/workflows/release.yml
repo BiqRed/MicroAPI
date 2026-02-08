@@ -52,7 +52,7 @@ jobs:
           PY
 
       - name: Install project (dev + transport extras for tests)
-        run: uv sync --dev --extra grpc --extra http --extra ws
+        run: uv sync --extra dev --extra grpc --extra http --extra ws
 
       - name: Run tests
         run: uv run pytest -q

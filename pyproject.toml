@@ -1,6 +1,6 @@
 [project]
 name = "microapi"
-version = "1.0.1"
+version = "1.0.2"
 description = "A Python microservices framework with FastAPI-like interface for seamless inter-service communication"
 readme = "README.md"
 license = { text = "MIT" }
