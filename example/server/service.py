@@ -1,13 +1,14 @@
 """Users service definition with all 4 RPC method patterns."""
 
-from microapi import Service, types
-
 from schemas import GetUserPayload, GetUsersPayload, User
+
+from microapi import Service, types
 
 service = Service("users")
 
 
 # -- Unary: request -> response -------------------------------------------
+
 
 @service.method
 async def get_user(payload: GetUserPayload) -> User:
@@ -23,6 +24,7 @@ async def get_user(payload: GetUserPayload) -> User:
 
 # -- Server streaming: request -> stream of responses ---------------------
 
+
 @service.method
 async def get_users(payload: GetUsersPayload) -> types.Streaming[User]:
     """Stream all users."""
@@ -37,6 +39,7 @@ async def get_users(payload: GetUsersPayload) -> types.Streaming[User]:
 
 # -- Client streaming: stream of requests -> response --------------------
 
+
 @service.method
 async def add_users(stream: types.Stream[User]) -> None:
     """Receive a stream of users and persist them."""
@@ -49,6 +52,7 @@ async def add_users(stream: types.Stream[User]) -> None:
 
 
 # -- Bidirectional streaming: stream <-> stream ---------------------------
+
 
 @service.method(generated_name="create_return_user")
 async def add_and_get_users(stream: types.Stream[User]) -> types.Streaming[User]:

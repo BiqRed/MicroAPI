@@ -1,10 +1,10 @@
 """Example MicroAPI server with the users service."""
 
+from middleware import AuthMiddleware, LoggingMiddleware
+from service import service as users_service
+
 from microapi import MicroAPI
 from microapi.transport.http import HTTPTransport
-
-from service import service as users_service
-from middleware import AuthMiddleware, LoggingMiddleware
 
 # Create the application
 app = MicroAPI()

@@ -2,9 +2,11 @@
 
 import asyncio
 import sys
+
 sys.path.insert(0, "..")
 
 from shared.lib import users
+
 from microapi.client.base import Connection
 from microapi.transport.http import HTTPTransport
 
