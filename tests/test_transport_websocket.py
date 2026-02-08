@@ -67,10 +67,7 @@ class TestWebSocketTransport:
         import asyncio
 
         client, _ = ws_setup
-        tasks = [
-            client.request("greeter", "hello", {"name": f"User{i}"})
-            for i in range(5)
-        ]
+        tasks = [client.request("greeter", "hello", {"name": f"User{i}"}) for i in range(5)]
         results = await asyncio.gather(*tasks)
         for i, result in enumerate(results):
             assert result["greeting"] == f"Hello, User{i}!"

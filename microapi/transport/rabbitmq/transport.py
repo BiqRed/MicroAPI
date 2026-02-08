@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from microapi._logging import get_logger
-from microapi.protocol import Envelope, MessageType, MethodType, Request, StatusCode
+from microapi.protocol import Envelope, MessageType, MethodType, Request
 from microapi.serialization import deserialize, serialize, to_dict
 from microapi.transport.base import Transport, TransportClient, TransportServer
 from microapi.types import Stream
@@ -67,17 +69,22 @@ class RabbitMQServer(TransportServer):
         logger.info("RabbitMQ server stopped")
 
     async def serve_forever(self) -> None:
-        import aio_pika
-
         assert self._channel is not None
         queue = await self._channel.get_queue(self.request_queue)
 
-        async with queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                if not self._running:
-                    break
-                async with message.process():
-                    asyncio.ensure_future(self._handle_message(message))
+        tasks: set[asyncio.Task[None]] = set()
+        try:
+            async with queue.iterator() as queue_iter:
+                async for message in queue_iter:
+                    if not self._running:
+                        break
+                    async with message.process():
+                        task = asyncio.create_task(self._handle_message(message))
+                        tasks.add(task)
+                        task.add_done_callback(tasks.discard)
+        finally:
+            for task in tasks:
+                task.cancel()
 
     async def _handle_message(self, message: Any) -> None:
         import aio_pika
@@ -175,6 +182,7 @@ class RabbitMQClient(TransportClient):
         self._connection: Any = None
         self._channel: Any = None
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._stream_queues: dict[str, asyncio.Queue[dict[str, Any] | None]] = {}
         self._recv_task: asyncio.Task[None] | None = None
 
     async def connect(self) -> None:
@@ -189,10 +197,8 @@ class RabbitMQClient(TransportClient):
     async def close(self) -> None:
         if self._recv_task:
             self._recv_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._recv_task
-            except asyncio.CancelledError:
-                pass
         if self._connection:
             await self._connection.close()
 
@@ -231,6 +237,47 @@ class RabbitMQClient(TransportClient):
 
         return await asyncio.wait_for(future, timeout=30.0)
 
+    async def request_stream(
+        self,
+        service: str,
+        method: str,
+        payload: dict[str, Any] | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Send a request and iterate over streaming responses."""
+        import aio_pika
+
+        assert self._channel is not None
+
+        envelope = Envelope(
+            type=MessageType.REQUEST,
+            service=service,
+            method=method,
+            payload=payload,
+            metadata=metadata or {},
+        )
+
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+        self._stream_queues[envelope.id] = queue
+
+        exchange = self._channel.default_exchange
+        await exchange.publish(
+            aio_pika.Message(
+                body=serialize(envelope.to_dict()),
+                reply_to=self.response_queue,
+                correlation_id=envelope.id,
+            ),
+            routing_key=self.request_queue,
+        )
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield item
+
+        self._stream_queues.pop(envelope.id, None)
+
     async def _receive_loop(self) -> None:
         assert self._channel is not None
         try:
@@ -248,6 +295,20 @@ class RabbitMQClient(TransportClient):
                             fut = self._pending.pop(envelope.id, None)
                             if fut and not fut.done():
                                 fut.set_result(envelope.payload or {})
+                            # Also signal end to any streaming queue
+                            sq = self._stream_queues.pop(envelope.id, None)
+                            if sq:
+                                await sq.put(None)
+
+                        elif envelope.type == MessageType.STREAM_PUSH:
+                            sq = self._stream_queues.get(envelope.id)
+                            if sq and envelope.payload is not None:
+                                await sq.put(envelope.payload)
+
+                        elif envelope.type == MessageType.STREAM_END:
+                            sq = self._stream_queues.pop(envelope.id, None)
+                            if sq:
+                                await sq.put(None)
         except asyncio.CancelledError:
             pass
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ssl
 from typing import TYPE_CHECKING, Any
 
@@ -20,7 +21,7 @@ from h2.events import (
 from h2.exceptions import ProtocolError, StreamClosedError
 
 from microapi._logging import get_logger
-from microapi.protocol import MethodType, Request, Response, StatusCode
+from microapi.protocol import MethodType, Request, StatusCode
 from microapi.serialization import deserialize, serialize
 from microapi.transport.base import TransportServer
 from microapi.transport.grpc.codec import decode_messages, encode_message
@@ -75,7 +76,8 @@ class GRPCProtocol(asyncio.Protocol):
         try:
             events = self._h2.receive_data(data)
         except ProtocolError:
-            self._transport and self._transport.close()
+            if self._transport:
+                self._transport.close()
             return
 
         for event in events:
@@ -92,7 +94,8 @@ class GRPCProtocol(asyncio.Protocol):
             elif isinstance(event, RemoteSettingsChanged):
                 pass
             elif isinstance(event, ConnectionTerminated):
-                self._transport and self._transport.close()
+                if self._transport:
+                    self._transport.close()
                 return
 
         self._flush()
@@ -157,10 +160,8 @@ class GRPCProtocol(asyncio.Protocol):
                 payload = {}
 
             method_type = MethodType.UNARY
-            try:
+            with contextlib.suppress(Exception):
                 method_type = self._router.get_method_type(state.service, state.method)
-            except Exception:
-                pass
 
             request = Request(
                 service=state.service,
@@ -178,7 +179,7 @@ class GRPCProtocol(asyncio.Protocol):
                     try:
                         msg_data = deserialize(msg_bytes)
                         method_info = self._router.get_method_info(state.service, state.method)
-                        if method_info.stream_input_type:
+                        if method_info.stream_input_type and hasattr(method_info.stream_input_type, "model_validate"):
                             obj = method_info.stream_input_type.model_validate(msg_data)
                             await client_stream._feed(obj)
                         else:
@@ -261,7 +262,7 @@ class GRPCProtocol(asyncio.Protocol):
                 self._flow_waiters[stream_id] = fut
                 try:
                     await asyncio.wait_for(fut, timeout=IO_TIMEOUT)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     return
                 continue
 

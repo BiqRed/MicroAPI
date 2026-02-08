@@ -12,9 +12,7 @@ from microapi._logging import get_logger
 from microapi.protocol import (
     Envelope,
     MessageType,
-    MethodType,
     Request,
-    StatusCode,
 )
 from microapi.serialization import deserialize, serialize, to_dict
 from microapi.transport.base import TransportServer
@@ -69,6 +67,8 @@ class WebSocketServer(TransportServer):
 
         # Collect stream messages for client streaming
         stream_buffers: dict[str, Stream[Any]] = {}
+        # Track request handler tasks to ensure clean shutdown
+        tasks: set[asyncio.Task[None]] = set()
 
         try:
             async for raw_message in ws:
@@ -80,9 +80,9 @@ class WebSocketServer(TransportServer):
                     continue
 
                 if envelope.type == MessageType.REQUEST:
-                    asyncio.ensure_future(
-                        self._handle_request(ws, envelope)
-                    )
+                    task = asyncio.create_task(self._handle_request(ws, envelope))
+                    tasks.add(task)
+                    task.add_done_callback(tasks.discard)
                 elif envelope.type == MessageType.STREAM_PUSH:
                     await self._handle_stream_push(envelope, stream_buffers)
                 elif envelope.type == MessageType.STREAM_END:
@@ -90,6 +90,14 @@ class WebSocketServer(TransportServer):
 
         except websockets.exceptions.ConnectionClosed:
             pass
+        finally:
+            # Cancel any in-flight request handlers
+            for task in tasks:
+                task.cancel()
+            # Clean up stream buffers
+            for stream in stream_buffers.values():
+                await stream._close()
+            stream_buffers.clear()
 
     async def _handle_request(self, ws: ServerConnection, envelope: Envelope) -> None:
         """Handle a unary or server-streaming request."""
@@ -102,11 +110,6 @@ class WebSocketServer(TransportServer):
             metadata=envelope.metadata,
             id=envelope.id,
         )
-
-        try:
-            method_type = self._router.get_method_type(envelope.service, envelope.method)
-        except Exception:
-            method_type = MethodType.UNARY
 
         response = await self._router.handle_request(request)
 
@@ -157,7 +160,7 @@ class WebSocketServer(TransportServer):
             try:
                 assert self._router is not None
                 method_info = self._router.get_method_info(envelope.service, envelope.method)
-                if method_info.stream_input_type:
+                if method_info.stream_input_type and hasattr(method_info.stream_input_type, "model_validate"):
                     obj = method_info.stream_input_type.model_validate(envelope.payload)
                     await stream._feed(obj)
                 else:

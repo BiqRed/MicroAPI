@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import AsyncGenerator, Generic, TypeVar
+from collections.abc import AsyncGenerator
+from typing import TypeVar
 
 from microapi.exceptions import StreamClosedError
 
@@ -20,7 +21,7 @@ Streaming = AsyncGenerator[T, None]
 _SENTINEL = object()
 
 
-class Stream(Generic[T]):
+class Stream[T]:
     """An incoming stream of typed messages from a client.
 
     Used as a parameter type annotation in service methods to receive
@@ -37,6 +38,7 @@ class Stream(Generic[T]):
     def __init__(self) -> None:
         self._queue: asyncio.Queue[object] = asyncio.Queue()
         self._closed: bool = False
+        self._lock: asyncio.Lock = asyncio.Lock()
 
     # -- async iterator protocol ------------------------------------------
 
@@ -58,10 +60,11 @@ class Stream(Generic[T]):
         await self._queue.put(item)
 
     async def _close(self) -> None:
-        """Signal that no more items will arrive."""
-        if not self._closed:
-            self._closed = True
-            await self._queue.put(_SENTINEL)
+        """Signal that no more items will arrive (safe to call multiple times)."""
+        async with self._lock:
+            if not self._closed:
+                self._closed = True
+                await self._queue.put(_SENTINEL)
 
     @property
     def closed(self) -> bool:

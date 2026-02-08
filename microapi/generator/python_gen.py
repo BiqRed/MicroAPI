@@ -6,13 +6,10 @@ that can be imported and called like regular async functions.
 
 from __future__ import annotations
 
-import inspect
-import textwrap
 from pathlib import Path
 from typing import Any, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
-from pydantic.fields import FieldInfo
 
 from microapi._logging import get_logger
 from microapi.protocol import MethodType
@@ -63,16 +60,16 @@ def _python_type_str(annotation: Any) -> str:
     import types as _types
 
     if origin is _types.UnionType:
-        parts = [_python_type_str(a) for a in args]
-        return " | ".join(parts)
+        union_parts = [_python_type_str(a) for a in args]
+        return " | ".join(union_parts)
 
     # Try typing.Union
     try:
         import typing
 
         if origin is typing.Union:
-            parts = [_python_type_str(a) for a in args]
-            return " | ".join(parts)
+            union_parts = [_python_type_str(a) for a in args]
+            return " | ".join(union_parts)
     except Exception:
         pass
 
@@ -92,16 +89,20 @@ def _collect_schemas(services: dict[str, Service]) -> dict[str, type[BaseModel]]
         for method_info in service.methods.values():
             if method_info.input_type and method_info.input_type.__name__ not in schemas:
                 schemas[method_info.input_type.__name__] = method_info.input_type
-            if method_info.output_type:
-                if isinstance(method_info.output_type, type) and issubclass(method_info.output_type, BaseModel):
-                    if method_info.output_type.__name__ not in schemas:
-                        schemas[method_info.output_type.__name__] = method_info.output_type
-            if method_info.stream_input_type:
-                if isinstance(method_info.stream_input_type, type) and issubclass(
-                    method_info.stream_input_type, BaseModel
-                ):
-                    if method_info.stream_input_type.__name__ not in schemas:
-                        schemas[method_info.stream_input_type.__name__] = method_info.stream_input_type
+            if (
+                method_info.output_type
+                and isinstance(method_info.output_type, type)
+                and issubclass(method_info.output_type, BaseModel)
+                and method_info.output_type.__name__ not in schemas
+            ):
+                schemas[method_info.output_type.__name__] = method_info.output_type
+            if (
+                method_info.stream_input_type
+                and isinstance(method_info.stream_input_type, type)
+                and issubclass(method_info.stream_input_type, BaseModel)
+                and method_info.stream_input_type.__name__ not in schemas
+            ):
+                schemas[method_info.stream_input_type.__name__] = method_info.stream_input_type
     return schemas
 
 
@@ -178,12 +179,12 @@ def _generate_unary_method(
     lines = [
         f"async def {func_name}({params_str}) -> {return_type}:",
         f'    """Call {service_name}.{method_info.name}."""',
-        f"    conn = Connection.get_current()",
-        f"    result = await conn.request(",
+        "    conn = Connection.get_current()",
+        "    result = await conn.request(",
         f'        service="{service_name}",',
         f'        method="{method_info.name}",',
         f"        payload={payload_str},",
-        f"    )",
+        "    )",
         f"    return {return_type}.model_validate(result)" if return_type != "dict" else "    return result",
     ]
     return "\n".join(lines)
@@ -224,12 +225,12 @@ def _generate_server_streaming_method(
     lines = [
         f"async def {func_name}({params_str}) -> AsyncIterator[{item_type}]:",
         f'    """Stream results from {service_name}.{method_info.name}."""',
-        f"    conn = Connection.get_current()",
-        f"    async for item in conn.request_stream(",
+        "    conn = Connection.get_current()",
+        "    async for item in conn.request_stream(",
         f'        service="{service_name}",',
         f'        method="{method_info.name}",',
         f"        payload={payload_str},",
-        f"    ):",
+        "    ):",
         f"        yield {item_type}.model_validate(item)" if item_type != "dict" else "        yield item",
     ]
     return "\n".join(lines)
@@ -271,18 +272,18 @@ def _generate_client_streaming_class(
     lines = [
         f"class {class_name}(ClientStream):",
         f'    """Client stream for {service_name}.{method_info.name}."""',
-        f"",
-        f"    def __init__(self) -> None:",
-        f"        conn = Connection.get_current()",
+        "",
+        "    def __init__(self) -> None:",
+        "        conn = Connection.get_current()",
         f'        super().__init__(service="{service_name}", method="{method_info.name}", transport=conn.transport)',
-        f"",
+        "",
         f"    async def send(self, {send_params_str}) -> None:",
-        f'        """Send a message to the server."""',
+        '        """Send a message to the server."""',
         send_body,
-        f"",
-        f"    async def end(self) -> None:",
-        f'        """Signal end of stream."""',
-        f"        await super().end()",
+        "",
+        "    async def end(self) -> None:",
+        '        """Signal end of stream."""',
+        "        await super().end()",
     ]
     return "\n".join(lines)
 
@@ -324,25 +325,27 @@ def _generate_bidi_streaming_class(
     lines = [
         f"class {class_name}(ClientStream[{out_type_name}]):",
         f'    """Bidirectional stream for {service_name}.{method_info.name}."""',
-        f"",
-        f"    def __init__(self) -> None:",
-        f"        conn = Connection.get_current()",
+        "",
+        "    def __init__(self) -> None:",
+        "        conn = Connection.get_current()",
         f'        super().__init__(service="{service_name}", method="{method_info.name}", transport=conn.transport)',
-        f"",
+        "",
         f"    async def send(self, {send_params_str}) -> None:",
-        f'        """Send a message to the server."""',
+        '        """Send a message to the server."""',
         send_body,
-        f"",
+        "",
         f"    async def next(self) -> {out_type_name} | None:",
-        f'        """Receive next server message."""',
-        f"        data = await super().next()",
-        f"        if data is not None:",
-        f"            return {out_type_name}.model_validate(data)" if out_type_name != "dict" else "            return data",
-        f"        return None",
-        f"",
-        f"    async def end(self) -> None:",
-        f'        """Signal end of stream."""',
-        f"        await super().end()",
+        '        """Receive next server message."""',
+        "        data = await super().next()",
+        "        if data is not None:",
+        f"            return {out_type_name}.model_validate(data)"
+        if out_type_name != "dict"
+        else "            return data",
+        "        return None",
+        "",
+        "    async def end(self) -> None:",
+        '        """Signal end of stream."""',
+        "        await super().end()",
     ]
     return "\n".join(lines)
 
@@ -396,7 +399,7 @@ def generate_python_lib(services: dict[str, Service], output_dir: Path) -> None:
             "from microapi.client.base import ClientSchema, Connection",
             "from microapi.client.stream import ClientStream",
             "",
-            f"from .types import *  # noqa: F401,F403",
+            "from .types import *  # noqa: F401,F403",
             "",
         ]
 

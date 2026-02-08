@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, get_args, get_origin, get_type_hints
+from typing import Any, get_args, get_origin, get_type_hints
 
 from microapi._logging import logger
 from microapi.dependencies import _Depends
@@ -130,7 +131,7 @@ class Service:
             origin = get_origin(return_ann)
             import types as _bt
             from collections.abc import AsyncGenerator as AbcAsyncGenerator
-            from typing import AsyncGenerator as TypingAsyncGenerator
+            from collections.abc import AsyncGenerator as TypingAsyncGenerator
 
             if origin in (TypingAsyncGenerator, AbcAsyncGenerator, _bt.AsyncGeneratorType):
                 has_server_stream = True

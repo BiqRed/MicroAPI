@@ -9,7 +9,6 @@ from microapi.protocol import (
     Request,
     Response,
     StatusCode,
-    StreamMessage,
 )
 
 

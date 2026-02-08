@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncIterator
+import contextlib
+from collections.abc import AsyncIterator
+from typing import Any
 
 import websockets
 from websockets.asyncio.client import ClientConnection
@@ -35,10 +37,8 @@ class WebSocketClient(TransportClient):
     async def close(self) -> None:
         if self._recv_task:
             self._recv_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._recv_task
-            except asyncio.CancelledError:
-                pass
         if self._ws:
             await self._ws.close()
             self._ws = None

@@ -6,7 +6,7 @@ import pytest
 
 from microapi import Schema, Service, types
 from microapi.middleware import Middleware
-from microapi.protocol import MethodType, Request, Response, StatusCode
+from microapi.protocol import MethodType, Request, StatusCode
 from microapi.routing import Router
 
 
@@ -53,6 +53,7 @@ class TestRouter:
         items = []
         async for item in resp.payload:
             from microapi.serialization import to_dict
+
             items.append(to_dict(item))
         assert len(items) == 3
 

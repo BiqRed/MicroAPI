@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import ssl
-import struct
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from h2.config import H2Configuration
 from h2.connection import H2Connection
@@ -16,7 +16,7 @@ from h2.events import (
     StreamReset,
     WindowUpdated,
 )
-from h2.exceptions import ProtocolError, StreamClosedError
+from h2.exceptions import ProtocolError
 
 from microapi._logging import get_logger
 from microapi.serialization import deserialize, serialize
@@ -83,15 +83,8 @@ class GRPCClientProtocol(asyncio.Protocol):
                 state = self._streams.get(event.stream_id)
                 if state:
                     state.data_buf += event.data
-                self._h2.acknowledge_received_data(
-                    event.flow_controlled_length, event.stream_id
-                )
-            elif isinstance(event, StreamEnded):
-                state = self._streams.get(event.stream_id)
-                if state:
-                    state.ended = True
-                    state.event.set()
-            elif isinstance(event, StreamReset):
+                self._h2.acknowledge_received_data(event.flow_controlled_length, event.stream_id)
+            elif isinstance(event, (StreamEnded, StreamReset)):
                 state = self._streams.get(event.stream_id)
                 if state:
                     state.ended = True
@@ -164,12 +157,14 @@ class GRPCClient(TransportClient):
     async def connect(self) -> None:
         config = H2Configuration(client_side=True, header_encoding="utf-8")
         loop = asyncio.get_running_loop()
-        self._transport, self._protocol = await loop.create_connection(  # type: ignore[assignment]
+        transport, protocol = await loop.create_connection(
             lambda: GRPCClientProtocol(config),
             self.host,
             self.port,
             ssl=self.ssl_context,
         )
+        self._transport = transport
+        self._protocol = protocol
         await self._protocol._connected.wait()
         logger.debug("Connected to gRPC server at %s:%d", self.host, self.port)
 
@@ -198,5 +193,28 @@ class GRPCClient(TransportClient):
         # Decode response
         messages, _ = decode_messages(state.data_buf)
         if messages:
-            return deserialize(messages[0])
+            result: dict[str, Any] = deserialize(messages[0])
+            return result
         return {}
+
+    async def request_stream(
+        self,
+        service: str,
+        method: str,
+        payload: dict[str, Any] | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Send a request and iterate over streaming response frames."""
+        if not self._protocol:
+            raise RuntimeError("Not connected")
+
+        payload_bytes = serialize(payload or {})
+        stream_id = self._protocol.new_stream()
+        self._protocol.send_request(stream_id, service, method, payload_bytes, metadata)
+
+        state = await self._protocol.wait_response(stream_id)
+
+        messages, _ = decode_messages(state.data_buf)
+        for msg in messages:
+            item: dict[str, Any] = deserialize(msg)
+            yield item

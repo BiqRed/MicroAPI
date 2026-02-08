@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from microapi._logging import get_logger
 from microapi.protocol import MethodType
-from microapi.service import MethodInfo, Service
+from microapi.service import Service
 
 logger = get_logger("generator.protobuf")
 
@@ -118,9 +118,7 @@ def _generate_service_proto(service: Service) -> str:
         elif method_info.method_type == MethodType.CLIENT_STREAMING:
             lines.append(f"  rpc {method_info.generated_name}(stream {stream_in_name}) returns ({output_name});")
         elif method_info.method_type == MethodType.BIDI_STREAMING:
-            lines.append(
-                f"  rpc {method_info.generated_name}(stream {stream_in_name}) returns (stream {output_name});"
-            )
+            lines.append(f"  rpc {method_info.generated_name}(stream {stream_in_name}) returns (stream {output_name});")
 
     lines.append("}")
     return "\n".join(lines)
@@ -163,7 +161,7 @@ def generate_proto_files(services: dict[str, Service], output_dir: Path) -> None
         proto_lines = [
             'syntax = "proto3";',
             "",
-            f'package {svc_name};',
+            f"package {svc_name};",
             "",
             f'option go_package = "./{svc_name}pb";',
             "",

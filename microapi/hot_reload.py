@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import signal
-import subprocess
-import sys
+from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 from microapi._logging import get_logger
 

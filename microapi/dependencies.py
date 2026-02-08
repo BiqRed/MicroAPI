@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from microapi.exceptions import DependencyError
 
@@ -65,9 +66,7 @@ class DependencyResolver:
             try:
                 result = await self._call_dependency(dep.dependency, request)
             except Exception as exc:
-                raise DependencyError(
-                    f"Failed to resolve dependency '{name}': {exc}"
-                ) from exc
+                raise DependencyError(f"Failed to resolve dependency '{name}': {exc}") from exc
 
             if dep.use_cache:
                 cache[dep_id] = result
@@ -81,17 +80,21 @@ class DependencyResolver:
         request: Request,
     ) -> Any:
         """Call a single dependency callable, injecting *request* if accepted."""
+        from microapi.protocol import Request as RequestType
+
         sig = inspect.signature(dependency)
         kwargs: dict[str, Any] = {}
 
-        for param_name, param in sig.parameters.items():
-            ann = param.annotation
-            if ann is not inspect.Parameter.empty:
-                # Import here to avoid circular imports at module level
-                from microapi.protocol import Request as RequestType
+        # Use get_type_hints to resolve string annotations from PEP 563
+        try:
+            hints = inspect.get_annotations(dependency, eval_str=True)
+        except Exception:
+            hints = {}
 
-                if ann is RequestType or (isinstance(ann, type) and issubclass(ann, RequestType)):
-                    kwargs[param_name] = request
+        for param_name in sig.parameters:
+            ann = hints.get(param_name)
+            if ann is not None and (ann is RequestType or (isinstance(ann, type) and issubclass(ann, RequestType))):
+                kwargs[param_name] = request
 
         result = dependency(**kwargs)
         if inspect.isawaitable(result):

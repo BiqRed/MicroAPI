@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import aiohttp
 
@@ -54,7 +55,8 @@ class HTTPClient(TransportClient):
                 raise TransportError(f"HTTP {resp.status}: {error_body}")
 
             data = await resp.read()
-            return deserialize(data)
+            result: dict[str, Any] = deserialize(data)
+            return result
 
     async def request_stream(
         self,

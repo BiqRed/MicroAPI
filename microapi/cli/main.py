@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -25,6 +25,7 @@ console = Console()
 # version
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def version() -> None:
     """Print the MicroAPI version."""
@@ -35,6 +36,7 @@ def version() -> None:
 # run
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def run(
     app_path: str = typer.Argument(
@@ -43,7 +45,8 @@ def run(
     ),
     transport: str = typer.Option(
         "http",
-        "--transport", "-t",
+        "--transport",
+        "-t",
         help="Transport to use: grpc, http, websocket",
     ),
     host: str = typer.Option("127.0.0.1", "--host", "-h", help="Bind host"),
@@ -62,10 +65,10 @@ def run(
     # Create transport
     transport_obj = _create_transport(transport, host, port)
 
-    console.print(f"[bold green]Starting MicroAPI server[/bold green]")
+    console.print("[bold green]Starting MicroAPI server[/bold green]")
     console.print(f"  Transport: [cyan]{transport}[/cyan] on {host}:{port}")
     if reload:
-        console.print(f"  [yellow]Hot reload enabled[/yellow]")
+        console.print("  [yellow]Hot reload enabled[/yellow]")
 
     microapi_app.run(
         transport=transport_obj,
@@ -82,6 +85,7 @@ def run(
 # generate
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def generate(
     app_path: str = typer.Argument(
@@ -96,9 +100,9 @@ def generate(
     microapi_app = _import_app(app_path)
     output_path = Path(output)
 
-    from microapi.generator import generate_python_lib, generate_proto_files
+    from microapi.generator import generate_proto_files, generate_python_lib
 
-    console.print(f"[bold]Generating client library...[/bold]")
+    console.print("[bold]Generating client library...[/bold]")
     generate_python_lib(microapi_app.router.services, output_path)
     console.print(f"  [green]Client library generated in {output_path}[/green]")
 
@@ -111,6 +115,7 @@ def generate(
 # ---------------------------------------------------------------------------
 # info
 # ---------------------------------------------------------------------------
+
 
 @app.command()
 def info(
@@ -151,6 +156,7 @@ def info(
 # ---------------------------------------------------------------------------
 # init
 # ---------------------------------------------------------------------------
+
 
 @app.command()
 def init(
@@ -213,7 +219,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 
 
-def _import_app(app_path: str) -> "MicroAPI":  # type: ignore[name-defined]
+def _import_app(app_path: str) -> Any:
     """Import a MicroAPI app from a dotted path like 'module.sub:app'."""
     from microapi.app import MicroAPI
 
@@ -232,7 +238,7 @@ def _import_app(app_path: str) -> "MicroAPI":  # type: ignore[name-defined]
         module = importlib.import_module(module_path)
     except ModuleNotFoundError as e:
         console.print(f"[red]Error: Could not import '{module_path}': {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     app_obj = getattr(module, attr_name, None)
     if app_obj is None:
@@ -246,9 +252,8 @@ def _import_app(app_path: str) -> "MicroAPI":  # type: ignore[name-defined]
     return app_obj
 
 
-def _create_transport(transport_name: str, host: str, port: int) -> "Transport":  # type: ignore[name-defined]
+def _create_transport(transport_name: str, host: str, port: int) -> Any:
     """Create a transport instance from a name string."""
-    from microapi.transport.base import Transport
 
     transports = {
         "grpc": ("microapi.transport.grpc", "GRPCTransport"),

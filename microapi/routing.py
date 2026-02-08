@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, AsyncIterator, get_origin, get_type_hints
+from typing import Any, get_origin, get_type_hints
 
 from microapi._logging import logger
 from microapi.dependencies import DependencyResolver
 from microapi.exceptions import (
     MethodNotFoundError,
     ServiceNotFoundError,
-    ValidationError,
 )
-from microapi.middleware import CallNext, Middleware, MiddlewareChain
+from microapi.middleware import Middleware, MiddlewareChain
 from microapi.protocol import MethodType, Request, Response, StatusCode
 from microapi.serialization import to_dict
 from microapi.service import MethodInfo, Service

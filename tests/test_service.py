@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 from microapi import Depends, Schema, Service, types
-from microapi.protocol import MethodType
 from microapi.dependencies import _Depends
+from microapi.protocol import MethodType
 
 
 class Payload(Schema):

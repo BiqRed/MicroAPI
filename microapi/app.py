@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator, Callable, Sequence
+from typing import Any
 
 from microapi._logging import configure_logging, logger
 from microapi.lifecycle import Lifespan, default_lifespan
@@ -119,9 +120,7 @@ class MicroAPI:
         if reload:
             self._run_with_reload(transport, auto_generate_lib, generated_lib_dir, generate_protos, protos_dir)
         else:
-            asyncio.run(
-                self._serve(transport, auto_generate_lib, generated_lib_dir, generate_protos, protos_dir)
-            )
+            asyncio.run(self._serve(transport, auto_generate_lib, generated_lib_dir, generate_protos, protos_dir))
 
     async def _serve(
         self,
@@ -134,10 +133,11 @@ class MicroAPI:
         """Async core of the server lifecycle."""
         self._shutdown_event = asyncio.Event()
 
-        # Install signal handlers
+        # Install signal handlers (and remove them on shutdown)
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self._shutdown_event.set)
+        installed_signals = (signal.SIGINT, signal.SIGTERM)
 
         # Code generation
         if auto_generate_lib:
@@ -157,7 +157,7 @@ class MicroAPI:
                 if asyncio.iscoroutine(result):
                     await result
             try:
-                async with asynccontextmanager(lifespan_cm)(self):
+                async with asynccontextmanager(lifespan_cm)(self):  # type: ignore[arg-type]
                     yield
             finally:
                 # on_shutdown hooks
@@ -179,6 +179,10 @@ class MicroAPI:
 
             logger.info("Shutting down...")
             await server.stop()
+
+            # Remove signal handlers
+            for sig in installed_signals:
+                loop.remove_signal_handler(sig)
 
         logger.info("MicroAPI server stopped")
 

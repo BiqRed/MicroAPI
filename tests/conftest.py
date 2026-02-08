@@ -6,7 +6,6 @@ import pytest
 
 from microapi import Schema, Service, types
 
-
 # ---- Schemas used across tests -------------------------------------------
 
 

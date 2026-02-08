@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 
 
-class MessageType(str, Enum):
+class MessageType(StrEnum):
     """Type of a wire-level message."""
 
     REQUEST = "request"
@@ -18,7 +18,7 @@ class MessageType(str, Enum):
     ERROR = "error"
 
 
-class MethodType(str, Enum):
+class MethodType(StrEnum):
     """RPC method pattern."""
 
     UNARY = "unary"
@@ -46,6 +46,7 @@ class StatusCode(int, Enum):
 # ---------------------------------------------------------------------------
 # Request / Response dataclasses
 # ---------------------------------------------------------------------------
+
 
 @dataclass(slots=True)
 class Request:
@@ -81,6 +82,7 @@ class StreamMessage:
 # ---------------------------------------------------------------------------
 # Envelope used by JSON-based transports (HTTP, WS, Kafka, RabbitMQ)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(slots=True)
 class Envelope:

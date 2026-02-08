@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -33,8 +34,7 @@ class Connection:
     def get_current(cls) -> Connection:
         if cls._current is None:
             raise RuntimeError(
-                "No active MicroAPI connection. "
-                "Call Connection.set_current() or use 'async with connection:' first."
+                "No active MicroAPI connection. Call Connection.set_current() or use 'async with connection:' first."
             )
         return cls._current
 
@@ -60,12 +60,13 @@ class Connection:
         metadata: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Send a unary RPC request and return the response payload."""
-        return await self._transport.request(
+        result: dict[str, Any] = await self._transport.request(
             service=service,
             method=method,
             payload=payload,
             metadata=metadata or {},
         )
+        return result
 
     async def request_stream(
         self,

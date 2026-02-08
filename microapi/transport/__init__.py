@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from microapi.transport.base import Transport, TransportClient, TransportServer
 
 __all__ = [
@@ -11,7 +13,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):  # noqa: ANN204
+def __getattr__(name: str) -> Any:
     """Lazy-load transport implementations to avoid importing optional deps."""
     _lazy = {
         "GRPCTransport": "microapi.transport.grpc",

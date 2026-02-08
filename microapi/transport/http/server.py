@@ -9,7 +9,7 @@ from aiohttp import web
 
 from microapi._logging import get_logger
 from microapi.protocol import MethodType, Request, StatusCode
-from microapi.serialization import deserialize, serialize, to_dict
+from microapi.serialization import deserialize, serialize
 from microapi.transport.base import TransportServer
 from microapi.types import Stream
 
@@ -63,7 +63,7 @@ class HTTPServer(TransportServer):
     async def _health_check(self, request: web.Request) -> web.Response:
         return web.json_response({"status": "ok"})
 
-    async def _handle_request(self, http_request: web.Request) -> web.Response:
+    async def _handle_request(self, http_request: web.Request) -> web.StreamResponse:
         assert self._router is not None
 
         service = http_request.match_info["service"]
@@ -109,7 +109,11 @@ class HTTPServer(TransportServer):
             if isinstance(payload, list):
                 method_info = self._router.get_method_info(service, method)
                 for item in payload:
-                    if method_info.stream_input_type and isinstance(item, dict):
+                    if (
+                        method_info.stream_input_type
+                        and hasattr(method_info.stream_input_type, "model_validate")
+                        and isinstance(item, dict)
+                    ):
                         obj = method_info.stream_input_type.model_validate(item)
                         await client_stream._feed(obj)
                     else:

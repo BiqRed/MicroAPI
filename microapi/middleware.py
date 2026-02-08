@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from microapi.protocol import Request, Response
 
@@ -31,21 +31,20 @@ class MiddlewareChain:
     """Composes a list of middlewares into a single callable chain."""
 
     def __init__(self, middlewares: list[Middleware], handler: CallNext) -> None:
-        self._handler = handler
+        self._handler: CallNext = handler
         # Build the chain from inside out so the first middleware in the
         # list runs first.
         for mw in reversed(middlewares):
-            next_handler = self._handler
+            self._handler = self._wrap(mw, self._handler)
 
-            async def _make_handler(
-                request: Request,
-                *,
-                _mw: Middleware = mw,
-                _next: CallNext = next_handler,
-            ) -> Response:
-                return await _mw(request, _next)
+    @staticmethod
+    def _wrap(mw: Middleware, next_handler: CallNext) -> CallNext:
+        """Create a handler that wraps *mw* around *next_handler*."""
 
-            self._handler = _make_handler
+        async def _wrapped(request: Request) -> Response:
+            return await mw(request, next_handler)
+
+        return _wrapped
 
     async def __call__(self, request: Request) -> Response:
         return await self._handler(request)

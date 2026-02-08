@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from microapi import Schema, Service, types
+from microapi import Schema, Service
 from microapi.routing import Router
 from microapi.transport.grpc import GRPCTransport
 

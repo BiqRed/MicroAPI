@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class MicroAPIError(Exception):
     """Base exception for all MicroAPI errors."""
@@ -63,10 +65,7 @@ class StreamClosedError(StreamError):
 class ValidationError(MicroAPIError):
     """Raised when payload validation fails."""
 
-    def __init__(self, errors: list[dict] | str) -> None:
+    def __init__(self, errors: list[dict[str, Any]] | str) -> None:
         self.errors = errors
-        if isinstance(errors, list):
-            msg = "; ".join(str(e) for e in errors)
-        else:
-            msg = errors
+        msg = "; ".join(str(e) for e in errors) if isinstance(errors, list) else errors
         super().__init__(f"Validation error: {msg}")

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from microapi._logging import get_logger
-from microapi.protocol import Envelope, MessageType, MethodType, Request, StatusCode
+from microapi.protocol import Envelope, MessageType, MethodType, Request
 from microapi.serialization import deserialize, serialize, to_dict
 from microapi.transport.base import Transport, TransportClient, TransportServer
 from microapi.types import Stream
@@ -80,10 +82,17 @@ class KafkaServer(TransportServer):
         assert self._router is not None
         assert self._consumer is not None
 
-        async for message in self._consumer:
-            if not self._running:
-                break
-            asyncio.ensure_future(self._handle_message(message.value))
+        tasks: set[asyncio.Task[None]] = set()
+        try:
+            async for message in self._consumer:
+                if not self._running:
+                    break
+                task = asyncio.create_task(self._handle_message(message.value))
+                tasks.add(task)
+                task.add_done_callback(tasks.discard)
+        finally:
+            for task in tasks:
+                task.cancel()
 
     async def _handle_message(self, data: dict[str, Any]) -> None:
         assert self._router is not None
@@ -166,6 +175,7 @@ class KafkaClient(TransportClient):
         self._producer: Any = None
         self._consumer: Any = None
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._stream_queues: dict[str, asyncio.Queue[dict[str, Any] | None]] = {}
         self._recv_task: asyncio.Task[None] | None = None
 
     async def connect(self) -> None:
@@ -189,10 +199,8 @@ class KafkaClient(TransportClient):
     async def close(self) -> None:
         if self._recv_task:
             self._recv_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._recv_task
-            except asyncio.CancelledError:
-                pass
         if self._producer:
             await self._producer.stop()
         if self._consumer:
@@ -223,6 +231,37 @@ class KafkaClient(TransportClient):
 
         return await asyncio.wait_for(future, timeout=30.0)
 
+    async def request_stream(
+        self,
+        service: str,
+        method: str,
+        payload: dict[str, Any] | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Send a request and iterate over streaming responses."""
+        assert self._producer is not None
+
+        envelope = Envelope(
+            type=MessageType.REQUEST,
+            service=service,
+            method=method,
+            payload=payload,
+            metadata={**(metadata or {}), "reply_topic": self.response_topic},
+        )
+
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+        self._stream_queues[envelope.id] = queue
+
+        await self._producer.send(self.request_topic, envelope.to_dict())
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield item
+
+        self._stream_queues.pop(envelope.id, None)
+
     async def _receive_loop(self) -> None:
         assert self._consumer is not None
         try:
@@ -237,6 +276,20 @@ class KafkaClient(TransportClient):
                     fut = self._pending.pop(envelope.id, None)
                     if fut and not fut.done():
                         fut.set_result(envelope.payload or {})
+                    # Also signal end to any streaming queue
+                    queue = self._stream_queues.pop(envelope.id, None)
+                    if queue:
+                        await queue.put(None)
+
+                elif envelope.type == MessageType.STREAM_PUSH:
+                    queue = self._stream_queues.get(envelope.id)
+                    if queue and envelope.payload is not None:
+                        await queue.put(envelope.payload)
+
+                elif envelope.type == MessageType.STREAM_END:
+                    queue = self._stream_queues.pop(envelope.id, None)
+                    if queue:
+                        await queue.put(None)
         except asyncio.CancelledError:
             pass
 

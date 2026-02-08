@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Generic, TypeVar
+from collections.abc import AsyncIterator
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
 T = TypeVar("T")
 
 
-class ClientStream(Generic[T]):
+class ClientStream[T]:
     """Client-side stream for sending messages to the server.
 
     Used by generated client code for client-streaming and
@@ -33,7 +34,7 @@ class ClientStream(Generic[T]):
 
     async def end(self) -> dict[str, Any] | None:
         """Finalize the stream -- send all buffered messages and return response."""
-        result = await self._transport.request(
+        result: dict[str, Any] | None = await self._transport.request(
             service=self._service,
             method=self._method,
             payload=self._buffer,
@@ -41,16 +42,16 @@ class ClientStream(Generic[T]):
         self._response = result
         return result
 
-    async def next(self) -> T | None:
+    async def next(self) -> Any:
         """Return the response from ``end()`` (for bidi streaming)."""
-        return self._response  # type: ignore[return-value]
+        return self._response
 
     async def close(self) -> None:
         """Close the stream (no-op after end)."""
         self._buffer.clear()
 
 
-class ClientStreaming(Generic[T]):
+class ClientStreaming[T]:
     """Client-side async iterator for server-streamed responses.
 
     Used by generated client code for server-streaming methods.
@@ -66,6 +67,6 @@ class ClientStreaming(Generic[T]):
     async def _iterate(self) -> AsyncIterator[T]:
         async for item in self._stream:
             if isinstance(self._model, type) and issubclass(self._model, BaseModel):
-                yield self._model.model_validate(item)  # type: ignore[misc]
+                yield self._model.model_validate(item)
             else:
                 yield item  # type: ignore[misc]
