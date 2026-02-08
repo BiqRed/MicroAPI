@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from microapi.app import MicroAPI
 
-Lifespan = Callable[["MicroAPI"], AsyncIterator[None]]
+# A Lifespan is any callable that accepts a MicroAPI app and returns
+# either a raw async-iterator (async generator) or an async context
+# manager.  Both styles are supported automatically.
+Lifespan = Callable[["MicroAPI"], Any]
 
 
-@asynccontextmanager
 async def default_lifespan(app: MicroAPI) -> AsyncIterator[None]:  # noqa: ARG001
-    """Default no-op lifespan context manager."""
+    """Default no-op lifespan (raw async generator)."""
     yield

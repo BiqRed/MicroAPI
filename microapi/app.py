@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import signal
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
@@ -147,7 +148,15 @@ class MicroAPI:
             self._generate_protos(protos_dir)
 
         # Lifespan
-        lifespan_cm = self._lifespan or default_lifespan
+        lifespan_fn = self._lifespan or default_lifespan
+
+        # Normalise to a context manager.
+        # Raw async-generator functions (async def … yield) need wrapping;
+        # functions already decorated with @asynccontextmanager do not.
+        if inspect.isasyncgenfunction(lifespan_fn):
+            lifespan_ctx = asynccontextmanager(lifespan_fn)(self)
+        else:
+            lifespan_ctx = lifespan_fn(self)  # type: ignore[assignment]
 
         @asynccontextmanager
         async def _managed_lifespan() -> AsyncIterator[None]:
@@ -157,7 +166,7 @@ class MicroAPI:
                 if asyncio.iscoroutine(result):
                     await result
             try:
-                async with asynccontextmanager(lifespan_cm)(self):  # type: ignore[arg-type]
+                async with lifespan_ctx:
                     yield
             finally:
                 # on_shutdown hooks

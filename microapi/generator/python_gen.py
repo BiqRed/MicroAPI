@@ -367,12 +367,12 @@ def generate_python_lib(services: dict[str, Service], output_dir: Path) -> None:
     all_schemas = _collect_schemas(services)
 
     # ---- types.py ----
+    schema_names = list(all_schemas.keys())
+
     types_lines = [
         '"""Auto-generated schema types for MicroAPI client."""',
         "",
         "from __future__ import annotations",
-        "",
-        "from typing import Any",
         "",
         "from microapi.client.base import ClientSchema",
         "",
@@ -382,6 +382,11 @@ def generate_python_lib(services: dict[str, Service], output_dir: Path) -> None:
         types_lines.append(_generate_schema_class(name, model))
         types_lines.append("")
 
+    if schema_names:
+        types_lines.append("")
+        types_lines.append(f"__all__ = {schema_names!r}")
+        types_lines.append("")
+
     (output_dir / "types.py").write_text("\n".join(types_lines), encoding="utf-8")
 
     # ---- per-service modules ----
@@ -389,30 +394,61 @@ def generate_python_lib(services: dict[str, Service], output_dir: Path) -> None:
 
     for svc_name, service in services.items():
         service_module_names.append(svc_name)
+
+        # Collect which schema types this service actually uses
+        used_types: set[str] = set()
+        needs_async_iterator = False
+        needs_client_stream = False
+        for method_info in service.methods.values():
+            if method_info.input_type and isinstance(method_info.input_type, type):
+                used_types.add(method_info.input_type.__name__)
+            if method_info.output_type and isinstance(method_info.output_type, type):
+                used_types.add(method_info.output_type.__name__)
+            if method_info.stream_input_type and isinstance(method_info.stream_input_type, type):
+                used_types.add(method_info.stream_input_type.__name__)
+            if method_info.method_type == MethodType.SERVER_STREAMING:
+                needs_async_iterator = True
+            if method_info.method_type in (MethodType.CLIENT_STREAMING, MethodType.BIDI_STREAMING):
+                needs_client_stream = True
+                if method_info.method_type == MethodType.BIDI_STREAMING:
+                    needs_async_iterator = True
+
+        # Only import types that actually exist in schemas
+        importable_types = sorted(t for t in used_types if t in all_schemas)
+
         module_lines = [
             f'"""Auto-generated client for the "{svc_name}" service."""',
             "",
             "from __future__ import annotations",
             "",
-            "from typing import Any, AsyncIterator",
-            "",
-            "from microapi.client.base import ClientSchema, Connection",
-            "from microapi.client.stream import ClientStream",
-            "",
-            "from .types import *  # noqa: F401,F403",
-            "",
         ]
 
-        # Import specific types used by this service
-        used_types: set[str] = set()
-        for method_info in service.methods.values():
-            if method_info.output_type and isinstance(method_info.output_type, type):
-                used_types.add(method_info.output_type.__name__)
-            if method_info.stream_input_type and isinstance(method_info.stream_input_type, type):
-                used_types.add(method_info.stream_input_type.__name__)
+        # Conditional typing imports
+        typing_imports: list[str] = []
+        if needs_async_iterator:
+            typing_imports.append("AsyncIterator")
+        if typing_imports:
+            module_lines.append(f"from collections.abc import {', '.join(typing_imports)}")
+            module_lines.append("")
+
+        # Core imports
+        module_lines.append("from microapi.client.base import Connection")
+        if needs_client_stream:
+            module_lines.append("from microapi.client.stream import ClientStream")
+
+        # Schema type imports (explicit, no star import)
+        if importable_types:
+            module_lines.append("")
+            module_lines.append(f"from .types import {', '.join(importable_types)}")
+
+        module_lines.append("")
+
+        # Method exports
+        export_names: list[str] = []
 
         for method_info in service.methods.values():
             module_lines.append("")
+            export_names.append(method_info.generated_name)
             if method_info.method_type == MethodType.UNARY:
                 module_lines.append(_generate_unary_method(svc_name, method_info, all_schemas))
             elif method_info.method_type == MethodType.SERVER_STREAMING:
@@ -421,7 +457,10 @@ def generate_python_lib(services: dict[str, Service], output_dir: Path) -> None:
                 module_lines.append(_generate_client_streaming_class(svc_name, method_info, all_schemas))
             elif method_info.method_type == MethodType.BIDI_STREAMING:
                 module_lines.append(_generate_bidi_streaming_class(svc_name, method_info, all_schemas))
-            module_lines.append("")
+
+        module_lines.append("")
+        module_lines.append(f"__all__ = {export_names!r}")
+        module_lines.append("")
 
         (output_dir / f"{svc_name}.py").write_text("\n".join(module_lines), encoding="utf-8")
 
@@ -434,9 +473,9 @@ def generate_python_lib(services: dict[str, Service], output_dir: Path) -> None:
     ]
     for mod_name in service_module_names:
         init_lines.append(f"from . import {mod_name}")
-    init_lines.append("from . import types")
+    init_lines.append("from .types import *  # noqa: F403")
     init_lines.append("")
-    init_lines.append(f"__all__ = {[*service_module_names, 'types']!r}")
+    init_lines.append(f"__all__ = {[*service_module_names, *schema_names]!r}")
     init_lines.append("")
 
     (output_dir / "__init__.py").write_text("\n".join(init_lines), encoding="utf-8")

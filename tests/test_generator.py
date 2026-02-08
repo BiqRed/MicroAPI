@@ -64,7 +64,7 @@ class TestPythonGenerator:
 
             init_content = (output / "__init__.py").read_text()
             assert "from . import users" in init_content
-            assert "from . import types" in init_content
+            assert "from .types import *" in init_content
 
     def test_types_contains_schemas(self, sample_service: Service) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
