@@ -1,6 +1,6 @@
 [project]
 name = "microapi"
-version = "1.1.0"
+version = "1.1.1"
 description = "A Python microservices framework with FastAPI-like interface for seamless inter-service communication"
 readme = "README.md"
 license = { text = "MIT" }
@@ -37,6 +37,12 @@ ws = ["websockets>=13.0"]
 kafka = ["aiokafka>=0.10"]
 rabbitmq = ["aio-pika>=9.4"]
 all = ["microapi[grpc,http,ws,kafka,rabbitmq]"]
+bench = [
+    "fastapi>=0.110",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+    "aiohttp>=3.9",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
