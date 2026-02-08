@@ -12,54 +12,42 @@ T = TypeVar("T")
 class ClientStream(Generic[T]):
     """Client-side stream for sending messages to the server.
 
-    Used by generated client code for client-streaming
-    and bidirectional-streaming methods.
+    Used by generated client code for client-streaming and
+    bidirectional-streaming methods.
+
+    The stream buffers sent payloads locally; when ``end()`` is called
+    the buffered data is sent as a list in a single request via the
+    transport's ``request()`` method.
     """
 
     def __init__(self, service: str, method: str, transport: Any) -> None:
         self._service = service
         self._method = method
         self._transport = transport
-        self._stream: Any = None
+        self._buffer: list[dict[str, Any]] = []
+        self._response: Any = None
 
-    async def _ensure_stream(self) -> Any:
-        if self._stream is None:
-            self._stream = await self._transport.open_stream(
-                self._service, self._method
-            )
-        return self._stream
+    async def _send_raw(self, payload: dict[str, Any]) -> None:
+        """Buffer a payload to be sent when the stream ends."""
+        self._buffer.append(payload)
 
-    async def send_raw(self, payload: dict[str, Any]) -> None:
-        """Send a raw dict payload to the server."""
-        stream = await self._ensure_stream()
-        await stream.send(payload)
-
-    async def end(self) -> Any:
-        """Signal end of client stream and await final response."""
-        if self._stream is not None:
-            return await self._stream.end()
-        return None
+    async def end(self) -> dict[str, Any] | None:
+        """Finalize the stream -- send all buffered messages and return response."""
+        result = await self._transport.request(
+            service=self._service,
+            method=self._method,
+            payload=self._buffer,
+        )
+        self._response = result
+        return result
 
     async def next(self) -> T | None:
-        """Receive the next server-streamed message (bidi only)."""
-        if self._stream is not None:
-            data = await self._stream.recv()
-            return data
-        return None
+        """Return the response from ``end()`` (for bidi streaming)."""
+        return self._response  # type: ignore[return-value]
 
     async def close(self) -> None:
-        """Close the stream."""
-        if self._stream is not None:
-            await self._stream.close()
-
-    def __aiter__(self) -> AsyncIterator[T]:
-        return self._async_iter()
-
-    async def _async_iter(self) -> AsyncIterator[T]:
-        """Iterate over server responses (bidi streaming)."""
-        if self._stream is not None:
-            async for item in self._stream:
-                yield item
+        """Close the stream (no-op after end)."""
+        self._buffer.clear()
 
 
 class ClientStreaming(Generic[T]):

@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, AsyncIterator
 
 from pydantic import BaseModel, ConfigDict
-
-from microapi.protocol import Envelope, MessageType
-from microapi.serialization import deserialize, serialize
 
 
 class ClientSchema(BaseModel):
@@ -69,3 +66,37 @@ class Connection:
             payload=payload,
             metadata=metadata or {},
         )
+
+    async def request_stream(
+        self,
+        service: str,
+        method: str,
+        payload: dict[str, Any] | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Send a request and iterate over a streaming response.
+
+        Falls back to wrapping a unary response in a single-item
+        iterator if the transport lacks native streaming.
+        """
+        if hasattr(self._transport, "request_stream"):
+            async for item in self._transport.request_stream(
+                service=service,
+                method=method,
+                payload=payload,
+                metadata=metadata or {},
+            ):
+                yield item
+        else:
+            # Fallback: unary request, yield result(s)
+            result = await self._transport.request(
+                service=service,
+                method=method,
+                payload=payload,
+                metadata=metadata or {},
+            )
+            if isinstance(result, list):
+                for item in result:
+                    yield item
+            else:
+                yield result

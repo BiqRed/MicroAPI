@@ -225,7 +225,7 @@ def _generate_server_streaming_method(
         f"async def {func_name}({params_str}) -> AsyncIterator[{item_type}]:",
         f'    """Stream results from {service_name}.{method_info.name}."""',
         f"    conn = Connection.get_current()",
-        f"    async for item in conn.transport.request_stream(",
+        f"    async for item in conn.request_stream(",
         f'        service="{service_name}",',
         f'        method="{method_info.name}",',
         f"        payload={payload_str},",

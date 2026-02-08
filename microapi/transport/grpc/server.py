@@ -174,9 +174,9 @@ class GRPCProtocol(asyncio.Protocol):
             if method_type in (MethodType.CLIENT_STREAMING, MethodType.BIDI_STREAMING):
                 client_stream = Stream()
                 for msg_bytes in messages:
+                    msg_data: Any = None
                     try:
                         msg_data = deserialize(msg_bytes)
-                        # Get stream input type and validate
                         method_info = self._router.get_method_info(state.service, state.method)
                         if method_info.stream_input_type:
                             obj = method_info.stream_input_type.model_validate(msg_data)
@@ -184,7 +184,8 @@ class GRPCProtocol(asyncio.Protocol):
                         else:
                             await client_stream._feed(msg_data)
                     except Exception:
-                        await client_stream._feed(msg_data)
+                        if msg_data is not None:
+                            await client_stream._feed(msg_data)
                 await client_stream._close()
 
             response = await self._router.handle_request(request, client_stream)
